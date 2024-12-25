@@ -43,7 +43,7 @@ jobs:
       - name: Copy jar to EC2
         run: |
           scp -o StrictHostKeyChecking=no \
-            build/libs/*.jar \
+            build/libs/saver-0.0.1-SNAPSHOT.jar \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app.jar
         env:
           EC2_USER: ${{ secrets.EC2_USER }}
