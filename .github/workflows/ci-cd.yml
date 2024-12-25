@@ -1,0 +1,70 @@
+name: Build & Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]  # main 브랜치에 푸시될 때만 동작
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # (1) 소스코드 체크아웃
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      # (2) application.yml 생성
+      - name: Create application.yml
+        run: |
+          mkdir -p src/main/resources
+          echo "${{ secrets.APP_YML }}" > src/main/resources/application.yml
+
+      # (3) JDK 설정
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: temurin
+
+      # (4) Gradle 빌드 (테스트는 필요시 수행)
+      - name: Build (Gradle)
+        run: |
+          ./gradlew clean build
+          ls -alh build/libs
+
+      # (5) SSH Agent 설정 (비공개 키 등록)
+      - name: Add SSH Key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # (6) build/libs 폴더 내 jar를 EC2로 전송
+      - name: Copy jar to EC2
+        run: |
+          scp -o StrictHostKeyChecking=no \
+            build/libs/*.jar \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app.jar
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+
+      # (7) EC2에서 기존 프로세스 종료 & 새로 실행
+      - name: Restart App on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # 1) 기존 프로세스 종료 (app.jar)
+            if pgrep -f app.jar > /dev/null
+            then
+              echo "Kill existing process..."
+              pgrep -f app.jar | xargs kill -9
+              sleep 2
+            fi
+
+            # 2) 새로 실행
+            echo "Start new Spring Boot jar..."
+            nohup java -jar /home/${{ secrets.EC2_USER }}/app.jar --server.port=8080 > /home/ubuntu/app.log 2>&1 &
+            exit
+          EOF
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
