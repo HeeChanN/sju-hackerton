@@ -29,6 +29,7 @@ jobs:
       # (4) Gradle 빌드 (테스트는 필요시 수행)
       - name: Build (Gradle)
         run: |
+          chmod +x ./gradlew
           ./gradlew clean build
           ls -alh build/libs
 
